@@ -1,7 +1,8 @@
 using System;
 using System.Runtime.InteropServices;
+using System.Windows;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using Windows.Foundation;
 using Windows.Graphics.Imaging;
 
 namespace ObjectDetectionApp.Utilities;
@@ -19,27 +20,31 @@ public static class SoftwareBitmapExtensions
         return ExtractBytes(bitmap);
     }
 
-    public static WriteableBitmap ToWriteableBitmap(this SoftwareBitmap bitmap)
+    public static WriteableBitmap ToWriteableBitmap(this byte[] pixels, int width, int height)
     {
-        if (bitmap is null)
+        if (pixels is null)
         {
-            throw new ArgumentNullException(nameof(bitmap));
+            throw new ArgumentNullException(nameof(pixels));
         }
 
-        if (bitmap.BitmapPixelFormat != BitmapPixelFormat.Bgra8 || bitmap.BitmapAlphaMode != BitmapAlphaMode.Premultiplied)
+        if (width <= 0)
         {
-            using var converted = SoftwareBitmap.Convert(bitmap, BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
-            return CreateWriteableBitmap(converted);
+            throw new ArgumentOutOfRangeException(nameof(width));
         }
 
-        return CreateWriteableBitmap(bitmap);
-    }
+        if (height <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(height));
+        }
 
-    private static WriteableBitmap CreateWriteableBitmap(SoftwareBitmap bitmap)
-    {
-        var pixels = ExtractBytes(bitmap);
-        var writeableBitmap = new WriteableBitmap(bitmap.PixelWidth, bitmap.PixelHeight, 96, 96, System.Windows.Media.PixelFormats.Bgra32, null);
-        writeableBitmap.WritePixels(new System.Windows.Int32Rect(0, 0, bitmap.PixelWidth, bitmap.PixelHeight), pixels, bitmap.PixelWidth * 4, 0);
+        var expectedLength = width * height * 4;
+        if (pixels.Length < expectedLength)
+        {
+            throw new ArgumentException("Pixel buffer is smaller than expected for the supplied dimensions.", nameof(pixels));
+        }
+
+        var writeableBitmap = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgra32, null);
+        writeableBitmap.WritePixels(new Int32Rect(0, 0, width, height), pixels, width * 4, 0);
         return writeableBitmap;
     }
 

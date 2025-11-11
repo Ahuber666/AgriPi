@@ -53,14 +53,9 @@ public sealed class ObjectDetectionService : IAsyncDisposable
         _confidenceThreshold = confidenceThreshold;
     }
 
-    public async Task<IReadOnlyList<DetectionResult>> EvaluateAsync(VideoFrame frame, Size renderSize, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<DetectionResult>> EvaluateAsync(SoftwareBitmap bitmap, Size renderSize, CancellationToken cancellationToken)
     {
-        if (frame.SoftwareBitmap is null)
-        {
-            throw new InvalidOperationException("VideoFrame did not contain a SoftwareBitmap.");
-        }
-
-        using var resizedBitmap = await ResizeBitmapAsync(frame.SoftwareBitmap, _inputWidth, _inputHeight, cancellationToken).ConfigureAwait(false);
+        using var resizedBitmap = await ResizeBitmapAsync(bitmap, _inputWidth, _inputHeight, cancellationToken).ConfigureAwait(false);
 
         var inputTensor = CreateInputTensor(resizedBitmap);
 

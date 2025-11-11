@@ -12,6 +12,7 @@ using ObjectDetectionApp.Models;
 using ObjectDetectionApp.Services;
 using ObjectDetectionApp.Utilities;
 using Windows.Foundation;
+using Windows.Graphics.Imaging;
 using Windows.Media.Capture;
 using Windows.Media.Capture.Frames;
 using Windows.Media.MediaProperties;
@@ -180,7 +181,29 @@ public partial class MainWindow : Window
                 return;
             }
 
-            await ProcessFrameAsync(videoFrame, _processingCancellation!.Token).ConfigureAwait(false);
+            SoftwareBitmap? bitmapCopy = null;
+            try
+            {
+                bitmapCopy = SoftwareBitmap.Copy(videoFrame.SoftwareBitmap);
+            }
+            catch
+            {
+                try
+                {
+                    bitmapCopy = SoftwareBitmap.Convert(videoFrame.SoftwareBitmap, BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
+                }
+                catch (Exception ex)
+                {
+                    Dispatcher.Invoke(() => StatusText.Text = $"Frame copy error: {ex.Message}");
+                }
+            }
+
+            if (bitmapCopy is null)
+            {
+                return;
+            }
+
+            await ProcessFrameAsync(bitmapCopy, _processingCancellation!.Token).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -192,24 +215,39 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task ProcessFrameAsync(VideoFrame frame, CancellationToken token)
+    private async Task ProcessFrameAsync(SoftwareBitmap bitmap, CancellationToken token)
     {
-        if (_detectionService is null || frame.SoftwareBitmap is null)
+        if (_detectionService is null)
         {
+            bitmap.Dispose();
             return;
         }
 
-        var bitmap = frame.SoftwareBitmap;
-        var previewBitmap = bitmap.ToWriteableBitmap();
-        var frameSize = new Size(bitmap.PixelWidth, bitmap.PixelHeight);
-
-        var detections = await _detectionService.EvaluateAsync(frame, frameSize, token).ConfigureAwait(false);
-
-        await Dispatcher.InvokeAsync(() =>
+        SoftwareBitmap? convertedBitmap = null;
+        try
         {
-            PreviewImage.Source = previewBitmap;
-            DrawDetections(detections, frameSize);
-        });
+            var workingBitmap = bitmap;
+            if (bitmap.BitmapPixelFormat != BitmapPixelFormat.Bgra8 || bitmap.BitmapAlphaMode != BitmapAlphaMode.Premultiplied)
+            {
+                convertedBitmap = SoftwareBitmap.Convert(bitmap, BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
+                workingBitmap = convertedBitmap;
+            }
+
+            var frameSize = new Size(workingBitmap.PixelWidth, workingBitmap.PixelHeight);
+            var detections = await _detectionService.EvaluateAsync(workingBitmap, frameSize, token).ConfigureAwait(false);
+            var pixels = workingBitmap.ToBgra8Bytes();
+
+            await Dispatcher.InvokeAsync(() =>
+            {
+                PreviewImage.Source = pixels.ToWriteableBitmap((int)frameSize.Width, (int)frameSize.Height);
+                DrawDetections(detections, frameSize);
+            });
+        }
+        finally
+        {
+            convertedBitmap?.Dispose();
+            bitmap.Dispose();
+        }
     }
 
     private void DrawDetections(IReadOnlyCollection<DetectionResult> detections, Size frameSize)
