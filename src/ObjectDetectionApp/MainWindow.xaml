@@ -12,10 +12,12 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,12" Grid.Row="0">
-            <Button x:Name="StartButton" Content="Start" Width="100" Height="36" Click="OnStartClicked" />
-            <Button x:Name="StopButton" Content="Stop" Width="100" Height="36" Click="OnStopClicked" IsEnabled="False" />
-            <TextBlock x:Name="StatusText" VerticalAlignment="Center" Foreground="White" Margin="12,0,0,0" Text="Camera idle" />
+        <StackPanel>
+            <StackPanel.Resources>
+                <Style TargetType="FrameworkElement">
+                  <Setter Property="Margin" Value="0,0,8,0"/>
+                </Style>
+            </StackPanel.Resources>      
         </StackPanel>
 
         <Grid Grid.Row="1">
