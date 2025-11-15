@@ -52,7 +52,16 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (_frameReader is not null)
+        {
+            StatusText.Text = "Camera already running";
+            StartButton.IsEnabled = false;
+            StopButton.IsEnabled = true;
+            return;
+        }
+
         StartButton.IsEnabled = false;
+        StopButton.IsEnabled = false;
         StatusText.Text = "Starting camera...";
 
         try
@@ -65,6 +74,7 @@ public partial class MainWindow : Window
         {
             StatusText.Text = $"Camera error: {ex.Message}";
             StartButton.IsEnabled = true;
+            StopButton.IsEnabled = false;
         }
     }
 
@@ -77,7 +87,7 @@ public partial class MainWindow : Window
         StatusText.Text = "Camera stopped";
     }
 
-    private async void TryInitializeDetector()
+    private void TryInitializeDetector()
     {
         var assetsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets");
         var modelPath = Path.Combine(assetsPath, "model.onnx");
@@ -226,6 +236,12 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (token.IsCancellationRequested)
+        {
+            bitmap.Dispose();
+            return;
+        }
+
         SoftwareBitmap? convertedBitmap = null;
         try
         {
@@ -236,8 +252,19 @@ public partial class MainWindow : Window
                 workingBitmap = convertedBitmap;
             }
 
+            if (token.IsCancellationRequested)
+            {
+                return;
+            }
+
             var frameSize = new WinRtSize(workingBitmap.PixelWidth, workingBitmap.PixelHeight);
             var detections = await _detectionService.EvaluateAsync(workingBitmap, frameSize, token).ConfigureAwait(false);
+
+            if (token.IsCancellationRequested)
+            {
+                return;
+            }
+
             var pixels = workingBitmap.ToBgra8Bytes();
             var wpfFrameSize = new WpfSize(frameSize.Width, frameSize.Height);
 
