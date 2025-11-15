@@ -12,12 +12,30 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <StackPanel>
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,12">
             <StackPanel.Resources>
                 <Style TargetType="FrameworkElement">
-                  <Setter Property="Margin" Value="0,0,8,0"/>
+                    <Setter Property="Margin" Value="0,0,8,0" />
                 </Style>
-            </StackPanel.Resources>      
+            </StackPanel.Resources>
+
+            <Button x:Name="StartButton"
+                    Width="120"
+                    Height="36"
+                    Content="Start"
+                    Click="OnStartClicked" />
+            <Button x:Name="StopButton"
+                    Width="120"
+                    Height="36"
+                    Content="Stop"
+                    Click="OnStopClicked"
+                    IsEnabled="False" />
+            <TextBlock x:Name="StatusText"
+                       VerticalAlignment="Center"
+                       Foreground="White"
+                       Text="Loading model..."
+                       TextWrapping="Wrap"
+                       Width="Auto" />
         </StackPanel>
 
         <Grid Grid.Row="1">
