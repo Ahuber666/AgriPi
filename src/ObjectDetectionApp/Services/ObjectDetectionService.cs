@@ -61,6 +61,8 @@ public sealed class ObjectDetectionService : IAsyncDisposable
 
         var binding = new LearningModelBinding(_session);
         LearningModelEvaluationResult? results = null;
+        TensorFloat? boxesTensor = null;
+        TensorFloat? scoresTensor = null;
 
         try
         {
@@ -68,9 +70,9 @@ public sealed class ObjectDetectionService : IAsyncDisposable
 
             results = await Task.Run(() => _session.Evaluate(binding, "ObjectDetectionSession"), cancellationToken).ConfigureAwait(false);
 
-            var boxesTensor = GetTensorFloat(results, "boxes") ?? GetFirstTensorFloat(results, t => t.Shape.Count >= 3 && t.Shape[^1] == 4)
+            boxesTensor = GetTensorFloat(results, "boxes") ?? GetFirstTensorFloat(results, t => t.Shape.Count >= 3 && t.Shape[^1] == 4)
                 ?? throw new InvalidDataException("Unable to locate bounding box tensor in model output.");
-            var scoresTensor = GetTensorFloat(results, "scores") ?? GetFirstTensorFloat(results, t => t.Shape.Count >= 2 && t.Shape[^1] == boxesTensor.Shape[^2])
+            scoresTensor = GetTensorFloat(results, "scores") ?? GetFirstTensorFloat(results, t => t.Shape.Count >= 2 && t.Shape[^1] == boxesTensor.Shape[^2])
                 ?? throw new InvalidDataException("Unable to locate score tensor in model output.");
             var labelData = GetLabels(results, boxesTensor.Shape[^2]);
 
@@ -108,6 +110,8 @@ public sealed class ObjectDetectionService : IAsyncDisposable
         }
         finally
         {
+            DisposeWinRtObject(scoresTensor);
+            DisposeWinRtObject(boxesTensor);
             DisposeWinRtObject(results);
             DisposeWinRtObject(binding);
         }
@@ -195,25 +199,19 @@ public sealed class ObjectDetectionService : IAsyncDisposable
     {
         if (results.Outputs.TryGetValue("labels", out var labelsObj))
         {
-            switch (labelsObj)
+            var labels = ExtractLabels(labelsObj, expectedCount: null);
+            if (labels is not null)
             {
-                case TensorInt64Bit labelInt:
-                    return labelInt.GetAsVectorView().Select(v => (int)v).ToArray();
-                case TensorFloat labelFloat:
-                    return labelFloat.GetAsVectorView().Select(v => (int)Math.Round(v)).ToArray();
+                return labels;
             }
         }
 
         foreach (var output in results.Outputs.Values)
         {
-            if (output is TensorInt64Bit tensorInt && tensorInt.Shape[^1] == expectedCount)
+            var labels = ExtractLabels(output, expectedCount);
+            if (labels is not null)
             {
-                return tensorInt.GetAsVectorView().Select(v => (int)v).ToArray();
-            }
-
-            if (output is TensorFloat tensorFloat && tensorFloat.Shape[^1] == expectedCount)
-            {
-                return tensorFloat.GetAsVectorView().Select(v => (int)Math.Round(v)).ToArray();
+                return labels;
             }
         }
 
@@ -234,20 +232,67 @@ public sealed class ObjectDetectionService : IAsyncDisposable
         return "Unknown";
     }
 
+    private static IReadOnlyList<int>? ExtractLabels(object candidate, long? expectedCount)
+    {
+        switch (candidate)
+        {
+            case TensorInt64Bit tensorInt when expectedCount is null || tensorInt.Shape[^1] == expectedCount:
+                try
+                {
+                    return tensorInt.GetAsVectorView().Select(v => (int)v).ToArray();
+                }
+                finally
+                {
+                    DisposeWinRtObject(tensorInt);
+                }
+            case TensorFloat tensorFloat when expectedCount is null || tensorFloat.Shape[^1] == expectedCount:
+                try
+                {
+                    return tensorFloat.GetAsVectorView().Select(v => (int)Math.Round(v)).ToArray();
+                }
+                finally
+                {
+                    DisposeWinRtObject(tensorFloat);
+                }
+        }
+
+        return null;
+    }
+
     private static void DisposeWinRtObject(object? instance)
     {
         switch (instance)
         {
             case null:
                 return;
-            case IDisposable disposable:
+        }
+
+        if (instance is IDisposable disposable)
+        {
+            try
+            {
                 disposable.Dispose();
-                return;
+            }
+            catch (Exception)
+            {
+                // Suppress cleanup failures to avoid masking the original error.
+            }
         }
 
         if (instance is IClosable closable)
         {
-            closable.Close();
+            try
+            {
+                closable.Close();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Ignore objects that were already disposed.
+            }
+            catch (Exception)
+            {
+                // Suppress cleanup failures to avoid masking the original error.
+            }
         }
     }
 }
