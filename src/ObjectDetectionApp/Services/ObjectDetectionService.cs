@@ -242,10 +242,12 @@ public sealed class ObjectDetectionService : IAsyncDisposable
                 return;
             case IDisposable disposable:
                 disposable.Dispose();
-                break;
-            case IClosable closable:
-                closable.Close();
-                break;
+                return;
+        }
+
+        if (instance is IClosable closable)
+        {
+            closable.Close();
         }
     }
 }
