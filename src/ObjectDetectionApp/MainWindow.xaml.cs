@@ -77,7 +77,7 @@ public partial class MainWindow : Window
         StatusText.Text = "Camera stopped";
     }
 
-    private async void TryInitializeDetector()
+    private void TryInitializeDetector()
     {
         var assetsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets");
         var modelPath = Path.Combine(assetsPath, "model.onnx");

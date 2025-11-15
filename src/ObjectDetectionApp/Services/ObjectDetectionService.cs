@@ -59,48 +59,58 @@ public sealed class ObjectDetectionService : IAsyncDisposable
 
         var inputTensor = CreateInputTensor(resizedBitmap);
 
-        using var binding = new LearningModelBinding(_session);
-        binding.Bind(_session.Model.InputFeatures[0].Name, inputTensor);
+        var binding = new LearningModelBinding(_session);
+        LearningModelEvaluationResult? results = null;
 
-        using var results = await Task.Run(() => _session.Evaluate(binding, "ObjectDetectionSession"), cancellationToken).ConfigureAwait(false);
-
-        var boxesTensor = GetTensorFloat(results, "boxes") ?? GetFirstTensorFloat(results, t => t.Shape.Count >= 3 && t.Shape[^1] == 4)
-            ?? throw new InvalidDataException("Unable to locate bounding box tensor in model output.");
-        var scoresTensor = GetTensorFloat(results, "scores") ?? GetFirstTensorFloat(results, t => t.Shape.Count >= 2 && t.Shape[^1] == boxesTensor.Shape[^2])
-            ?? throw new InvalidDataException("Unable to locate score tensor in model output.");
-        var labelData = GetLabels(results, boxesTensor.Shape[^2]);
-
-        var boxes = boxesTensor.GetAsVectorView();
-        var scores = scoresTensor.GetAsVectorView();
-
-        var detections = new List<DetectionResult>();
-        int boxCount = boxes.Count / 4;
-
-        for (int i = 0; i < boxCount; i++)
+        try
         {
-            float score = scores[i];
-            if (score < _confidenceThreshold)
+            binding.Bind(_session.Model.InputFeatures[0].Name, inputTensor);
+
+            results = await Task.Run(() => _session.Evaluate(binding, "ObjectDetectionSession"), cancellationToken).ConfigureAwait(false);
+
+            var boxesTensor = GetTensorFloat(results, "boxes") ?? GetFirstTensorFloat(results, t => t.Shape.Count >= 3 && t.Shape[^1] == 4)
+                ?? throw new InvalidDataException("Unable to locate bounding box tensor in model output.");
+            var scoresTensor = GetTensorFloat(results, "scores") ?? GetFirstTensorFloat(results, t => t.Shape.Count >= 2 && t.Shape[^1] == boxesTensor.Shape[^2])
+                ?? throw new InvalidDataException("Unable to locate score tensor in model output.");
+            var labelData = GetLabels(results, boxesTensor.Shape[^2]);
+
+            var boxes = boxesTensor.GetAsVectorView();
+            var scores = scoresTensor.GetAsVectorView();
+
+            var detections = new List<DetectionResult>();
+            int boxCount = boxes.Count / 4;
+
+            for (int i = 0; i < boxCount; i++)
             {
-                continue;
+                float score = scores[i];
+                if (score < _confidenceThreshold)
+                {
+                    continue;
+                }
+
+                float xMin = boxes[i * 4 + 0];
+                float yMin = boxes[i * 4 + 1];
+                float xMax = boxes[i * 4 + 2];
+                float yMax = boxes[i * 4 + 3];
+
+                var rect = new System.Windows.Rect(
+                    xMin * renderSize.Width,
+                    yMin * renderSize.Height,
+                    Math.Max(0, (xMax - xMin) * renderSize.Width),
+                    Math.Max(0, (yMax - yMin) * renderSize.Height));
+
+                string label = ResolveLabel(labelData, i);
+
+                detections.Add(new DetectionResult(rect, label, score));
             }
 
-            float xMin = boxes[i * 4 + 0];
-            float yMin = boxes[i * 4 + 1];
-            float xMax = boxes[i * 4 + 2];
-            float yMax = boxes[i * 4 + 3];
-
-            var rect = new Rect(
-                xMin * renderSize.Width,
-                yMin * renderSize.Height,
-                Math.Max(0, (xMax - xMin) * renderSize.Width),
-                Math.Max(0, (yMax - yMin) * renderSize.Height));
-
-            string label = ResolveLabel(labelData, i);
-
-            detections.Add(new DetectionResult(rect, label, score));
+            return detections;
         }
-
-        return detections;
+        finally
+        {
+            DisposeWinRtObject(results);
+            DisposeWinRtObject(binding);
+        }
     }
 
     public ValueTask DisposeAsync()
@@ -222,5 +232,20 @@ public sealed class ObjectDetectionService : IAsyncDisposable
         }
 
         return "Unknown";
+    }
+
+    private static void DisposeWinRtObject(object? instance)
+    {
+        switch (instance)
+        {
+            case null:
+                return;
+            case IDisposable disposable:
+                disposable.Dispose();
+                break;
+            case IClosable closable:
+                closable.Close();
+                break;
+        }
     }
 }
