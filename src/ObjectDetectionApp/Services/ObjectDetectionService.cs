@@ -63,6 +63,8 @@ public sealed class ObjectDetectionService : IAsyncDisposable
         LearningModelEvaluationResult? results = null;
         TensorFloat? boxesTensor = null;
         TensorFloat? scoresTensor = null;
+        IReadOnlyList<int>? labelData = null;
+        List<DetectionResult>? detections = null;
 
         try
         {
@@ -74,13 +76,13 @@ public sealed class ObjectDetectionService : IAsyncDisposable
                 ?? throw new InvalidDataException("Unable to locate bounding box tensor in model output.");
             scoresTensor = GetTensorFloat(results, "scores") ?? GetFirstTensorFloat(results, t => t.Shape.Count >= 2 && t.Shape[^1] == boxesTensor.Shape[^2])
                 ?? throw new InvalidDataException("Unable to locate score tensor in model output.");
-            var labelData = GetLabels(results, boxesTensor.Shape[^2]);
+            labelData = GetLabels(results, boxesTensor.Shape[^2]);
 
-            var boxes = boxesTensor.GetAsVectorView();
-            var scores = scoresTensor.GetAsVectorView();
+            var boxes = CopyTensorData(boxesTensor);
+            var scores = CopyTensorData(scoresTensor);
 
-            var detections = new List<DetectionResult>();
-            int boxCount = boxes.Count / 4;
+            var detectionResults = new List<DetectionResult>();
+            int boxCount = boxes.Length / 4;
 
             for (int i = 0; i < boxCount; i++)
             {
@@ -103,10 +105,10 @@ public sealed class ObjectDetectionService : IAsyncDisposable
 
                 string label = ResolveLabel(labelData, i);
 
-                detections.Add(new DetectionResult(rect, label, score));
+                detectionResults.Add(new DetectionResult(rect, label, score));
             }
 
-            return detections;
+            detections = detectionResults;
         }
         finally
         {
@@ -114,7 +116,10 @@ public sealed class ObjectDetectionService : IAsyncDisposable
             DisposeWinRtObject(boxesTensor);
             DisposeWinRtObject(results);
             DisposeWinRtObject(binding);
+            DisposeWinRtObject(inputTensor);
         }
+
+        return detections ?? Array.Empty<DetectionResult>();
     }
 
     public ValueTask DisposeAsync()
@@ -257,6 +262,18 @@ public sealed class ObjectDetectionService : IAsyncDisposable
         }
 
         return null;
+    }
+
+    private static float[] CopyTensorData(TensorFloat tensor)
+    {
+        var view = tensor.GetAsVectorView();
+        var data = new float[view.Count];
+        for (int i = 0; i < view.Count; i++)
+        {
+            data[i] = view[i];
+        }
+
+        return data;
     }
 
     private static void DisposeWinRtObject(object? instance)
