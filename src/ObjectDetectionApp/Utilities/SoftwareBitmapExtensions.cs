@@ -3,7 +3,9 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Windows.Foundation;
 using Windows.Graphics.Imaging;
+using Windows.Storage.Streams;
 
 namespace ObjectDetectionApp.Utilities;
 
@@ -55,7 +57,7 @@ public static class SoftwareBitmapExtensions
         return GetBytes(reference, bitmap.PixelWidth * bitmap.PixelHeight * 4);
     }
 
-    private static unsafe byte[] GetBytes(IMemoryBufferReference reference, int length)
+    private static unsafe byte[] GetBytes(Windows.Foundation.IMemoryBufferReference reference, int length)
     {
         if (reference is null)
         {

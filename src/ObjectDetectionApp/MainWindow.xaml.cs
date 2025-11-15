@@ -18,6 +18,9 @@ using Windows.Media.Capture.Frames;
 using Windows.Media.MediaProperties;
 using Windows.Media;
 
+using WpfSize = System.Windows.Size;
+using WinRtSize = Windows.Foundation.Size;
+
 namespace ObjectDetectionApp;
 
 public partial class MainWindow : Window
@@ -233,14 +236,15 @@ public partial class MainWindow : Window
                 workingBitmap = convertedBitmap;
             }
 
-            var frameSize = new Size(workingBitmap.PixelWidth, workingBitmap.PixelHeight);
+            var frameSize = new WinRtSize(workingBitmap.PixelWidth, workingBitmap.PixelHeight);
             var detections = await _detectionService.EvaluateAsync(workingBitmap, frameSize, token).ConfigureAwait(false);
             var pixels = workingBitmap.ToBgra8Bytes();
+            var wpfFrameSize = new WpfSize(frameSize.Width, frameSize.Height);
 
             await Dispatcher.InvokeAsync(() =>
             {
-                PreviewImage.Source = pixels.ToWriteableBitmap((int)frameSize.Width, (int)frameSize.Height);
-                DrawDetections(detections, frameSize);
+                PreviewImage.Source = pixels.ToWriteableBitmap((int)wpfFrameSize.Width, (int)wpfFrameSize.Height);
+                DrawDetections(detections, wpfFrameSize);
             });
         }
         finally
@@ -250,7 +254,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void DrawDetections(IReadOnlyCollection<DetectionResult> detections, Size frameSize)
+    private void DrawDetections(IReadOnlyCollection<DetectionResult> detections, WpfSize frameSize)
     {
         OverlayCanvas.Children.Clear();
 
