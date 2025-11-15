@@ -8,6 +8,7 @@ using Microsoft.AI.MachineLearning;
 using ObjectDetectionApp.Models;
 using ObjectDetectionApp.Utilities;
 using Windows.Foundation;
+using IClosable = System.IDisposable;
 using Windows.Graphics.Imaging;
 using Windows.Media;
 
@@ -240,11 +241,8 @@ public sealed class ObjectDetectionService : IAsyncDisposable
         {
             case null:
                 return;
-            case IDisposable disposable:
-                disposable.Dispose();
-                break;
             case IClosable closable:
-                closable.Close();
+                closable.Dispose();
                 break;
         }
     }
